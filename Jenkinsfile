@@ -24,7 +24,7 @@ pipeline {
             }
         }
 
-        stage('Deploy JAR to EC2') {
+        stage('Deploy to EC2') {
             steps {
 
                 withCredentials([
@@ -34,12 +34,20 @@ pipeline {
                                 usernameVariable: 'EC2_SSH_USER'
                         )
                 ]) {
+
                     bat """
-                        scp -o StrictHostKeyChecking=no ^
-                        -i "%EC2_KEY%" ^
-                        target\\eureka-server-1.0.0.jar ^
-                        %EC2_SSH_USER%@%EC2_HOST%:%APP_DIR%/
-                    """
+                scp -o StrictHostKeyChecking=no ^
+                -i "%EC2_KEY%" ^
+                target\\eureka-server-0.0.1.jar ^
+                %EC2_SSH_USER%@%EC2_HOST%:%APP_DIR%/
+            """
+
+                    bat """
+                ssh -o StrictHostKeyChecking=no ^
+                -i "%EC2_KEY%" ^
+                %EC2_SSH_USER%@%EC2_HOST% ^
+                "sudo systemctl restart order-service"
+            """
                 }
             }
         }
