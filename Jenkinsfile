@@ -31,7 +31,7 @@ pipeline {
                         sshUserPrivateKey(
                                 credentialsId: 'ec2-deployment-key',
                                 keyFileVariable: 'EC2_KEY',
-                                usernameVariable: 'EC2_SSH_USER'
+                                usernameVariable: 'EC2_USER'
                         )
                 ]) {
 
@@ -39,13 +39,13 @@ pipeline {
                 scp -o StrictHostKeyChecking=no ^
                 -i "%EC2_KEY%" ^
                 eureka-server\\\\target\\\\eureka-server-1.0.0.jar ^
-                %EC2_SSH_USER%@%EC2_HOST%:%APP_DIR%/
+                %EC2_USER%@%EC2_HOST%:%APP_DIR%/
             """
 
                     bat """
                 ssh -o StrictHostKeyChecking=no ^
                 -i "C:\\Users\\kesar\\OneDrive\\Desktop\\AI\\AWS\\local-aws-key.pem" ^
-                %EC2_SSH_USER%@%EC2_HOST% ^
+                %EC2_USER%@%EC2_HOST% ^
                 "sudo systemctl restart order-service"
             """
                 }
