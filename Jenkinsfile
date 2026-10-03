@@ -1,7 +1,5 @@
 pipeline {
-
     agent any
-
     environment {
         EC2_HOST = '18.117.10.150'
         EC2_USER = 'ec2-user'
@@ -9,7 +7,6 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
