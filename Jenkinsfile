@@ -44,7 +44,7 @@ pipeline {
 
                     bat """
                 ssh -o StrictHostKeyChecking=no ^
-                -i "%EC2_KEY%" ^
+                -i "C:\\Users\\kesar\\OneDrive\\Desktop\\AI\\AWS\\local-aws-key.pem" ^
                 %EC2_SSH_USER%@%EC2_HOST% ^
                 "sudo systemctl restart order-service"
             """
