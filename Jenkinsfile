@@ -3,7 +3,8 @@ pipeline {
     environment {
         EC2_HOST = '18.117.10.150'
         EC2_USER = 'ec2-user'
-        APP_DIR = '/order-service'
+        APP_DIR  = '/order-service'
+        EC2_KEY  = 'C:\\ProgramData\\Jenkins\\.ssh\\ec2-key.pem'
     }
 
     stages {
@@ -17,33 +18,46 @@ pipeline {
                 bat 'mvn clean package -DskipTests'
             }
         }
-
         stage('Test') {
             steps {
                 bat 'mvn test'
             }
         }
-
         stage('Deploy to EC2') {
             steps {
-
-                withCredentials([
-                        sshUserPrivateKey(
-                                credentialsId: 'ec2-deployment-key',
-                                keyFileVariable: 'EC2_KEY',
-                                usernameVariable: 'EC2_USER'
-                        )
-                ]) {
-
-                    bat '''
-      scp -o StrictHostKeyChecking=no -i "C:\\ProgramData\\Jenkins\\.ssh\\ec2-key.pem" ^
-        eureka-server\\target\\eureka-server-1.0.0.jar ^
-        ec2-user@18.117.10.150:/order-service/
-      ssh -o StrictHostKeyChecking=no -i "C:\\ProgramData\\Jenkins\\.ssh\\ec2-key.pem" ^
-        ec2-user@18.117.10.150 "pkill -f eureka-server; nohup java -jar /order-service/eureka-server-1.0.0.jar > /order-service/app.log 2>&1 &"
-    '''
-                }
+                // No withCredentials here anymore — see note 1 below.
+                // Copies every service jar, then restarts the systemd services.
+                bat '''
+                    scp -o StrictHostKeyChecking=no -i "%EC2_KEY%" eureka-server\\target\\eureka-server-*.jar %EC2_USER%@%EC2_HOST%:%APP_DIR%/
+                    scp -o StrictHostKeyChecking=no -i "%EC2_KEY%" product-service\\target\\product-service-*.jar %EC2_USER%@%EC2_HOST%:%APP_DIR%/
+                    scp -o StrictHostKeyChecking=no -i "%EC2_KEY%" order-service\\target\\order-service-*.jar %EC2_USER%@%EC2_HOST%:%APP_DIR%/
+                    scp -o StrictHostKeyChecking=no -i "%EC2_KEY%" gateway\\target\\gateway-*.jar %EC2_USER%@%EC2_HOST%:%APP_DIR%/
+                    ssh -o StrictHostKeyChecking=no -i "%EC2_KEY%" %EC2_USER%@%EC2_HOST% ^
+                      "sudo systemctl restart eureka-server product-service order-service gateway"
+                '''
             }
+        }
+        stage('Smoke Test') {
+            steps {
+                // Waits up to ~2 min for Eureka, then fails the build if it's not up.
+                bat '''
+                    set /a tries=0
+                    :wait_eureka
+                    curl -sf http://%EC2_HOST%:8761/ >nul && goto eureka_up
+                    set /a tries+=1
+                    if %tries% geq 12 exit /b 1
+                    powershell -Command "Start-Sleep -Seconds 10"
+                    goto wait_eureka
+                    :eureka_up
+                    echo Eureka is UP — open http://%EC2_HOST%:8761 in your browser
+                '''
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo 'Build failed. On EC2, check: sudo journalctl -u eureka-server -n 50'
         }
     }
 }
