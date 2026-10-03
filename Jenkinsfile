@@ -35,19 +35,13 @@ pipeline {
                         )
                 ]) {
 
-                    bat """
-                scp -o StrictHostKeyChecking=no ^
-                -i "%EC2_KEY%" ^
-                eureka-server\\\\target\\\\eureka-server-1.0.0.jar ^
-                %EC2_USER%@%EC2_HOST%:%APP_DIR%/
-            """
-
-                    bat """
-                ssh -o StrictHostKeyChecking=no ^
-                -i "C:\\Users\\kesar\\OneDrive\\Desktop\\AI\\AWS\\local-aws-key.pem" ^
-                %EC2_USER%@%EC2_HOST% ^
-                "sudo systemctl restart order-service"
-            """
+                    bat '''
+      scp -o StrictHostKeyChecking=no -i "C:\\ProgramData\\Jenkins\\.ssh\\ec2-key.pem" ^
+        eureka-server\\target\\eureka-server-1.0.0.jar ^
+        ec2-user@18.117.10.150:/order-service/
+      ssh -o StrictHostKeyChecking=no -i "C:\\ProgramData\\Jenkins\\.ssh\\ec2-key.pem" ^
+        ec2-user@18.117.10.150 "pkill -f eureka-server; nohup java -jar /order-service/eureka-server-1.0.0.jar > /order-service/app.log 2>&1 &"
+    '''
                 }
             }
         }
