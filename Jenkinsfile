@@ -3,7 +3,7 @@ pipeline {
     environment {
         EC2_HOST = '18.117.10.150'
         EC2_USER = 'ec2-user'
-        APP_DIR = '/opt/order-service'
+        APP_DIR = '/order-service'
     }
 
     stages {
