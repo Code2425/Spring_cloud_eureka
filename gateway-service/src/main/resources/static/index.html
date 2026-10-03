@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Microservices Demo UI</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; background: #f5f7fa; color: #333; }
+  header { background: #1f497d; color: #fff; padding: 16px 24px; }
+  header h1 { margin: 0; font-size: 20px; }
+  .cid { font-size: 12px; opacity: .85; margin-top: 6px; }
+  main { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+  section { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  h2 { margin-top: 0; }
+  h3 { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; }
+  th { background: #f0f3f7; }
+  form { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
+  input, select, button { padding: 8px 10px; font-size: 14px; }
+  input, select { border: 1px solid #ccc; border-radius: 4px; }
+  button { background: #1f497d; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #163a63; }
+  .msg { margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }
+  .msg.ok { display: block; background: #e6f4ea; color: #1a7f37; }
+  .msg.err { display: block; background: #fdecea; color: #b3261e; }
+  footer { text-align: center; color: #777; font-size: 12px; padding: 20px; line-height: 1.8; }
+  code { background: #eef; padding: 2px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Microservices Demo &mdash; Storefront UI</h1>
+  <div class="cid">Last response correlation ID: <code id="cid">-</code></div>
+</header>
+<main>
+  <section>
+    <h2>Products</h2>
+    <button onclick="loadProducts()">Refresh</button>
+    <table id="productTable">
+      <thead><tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
+    </table>
+    <h3>Add a product</h3>
+    <form onsubmit="return createProduct(event)">
+      <input id="pName" placeholder="Name" required>
+      <input id="pDesc" placeholder="Description">
+      <input id="pPrice" type="number" step="0.01" min="0.01" placeholder="Price" required>
+      <input id="pStock" type="number" min="0" placeholder="Stock" required>
+      <button type="submit">Add product</button>
+    </form>
+    <div id="productMsg" class="msg"></div>
+  </section>
+
+  <section>
+    <h2>Place an order</h2>
+    <form onsubmit="return placeOrder(event)">
+      <select id="orderProduct"></select>
+      <input id="orderQty" type="number" min="1" value="1" required>
+      <button type="submit">Place order</button>
+    </form>
+    <div id="orderMsg" class="msg"></div>
+  </section>
+
+  <section>
+    <h2>Orders</h2>
+    <button onclick="loadOrders()">Refresh</button>
+    <table id="orderTable">
+      <thead><tr><th>ID</th><th>Product</th><th>Qty</th><th>Total</th><th>Status</th><th>Created</th></tr></thead>
+      <tbody><tr><td colspan="6">Loading...</td></tr></tbody>
+    </table>
+  </section>
+</main>
+<footer>
+  Gateway :8080 &middot; Eureka dashboard :8761 &middot; H2 consoles:
+  <code>http://localhost:8081/h2-console</code> (jdbc:h2:mem:productdb) &middot;
+  <code>http://localhost:8082/h2-console</code> (jdbc:h2:mem:orderdb) &middot;
+  user <code>sa</code>, empty password
+</footer>
+<script>
+const cidEl = document.getElementById('cid');
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options || {});
+  const cid = res.headers.get('X-Correlation-ID');
+  if (cid) cidEl.textContent = cid;
+  if (!res.ok) {
+    let msg = res.status + ' ' + res.statusText;
+    try { const err = await res.json(); if (err.message) msg = err.message; } catch (e) { /* ignore */ }
+    throw new Error(msg);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function showMsg(id, text, ok) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'msg ' + (ok ? 'ok' : 'err');
+}
+
+async function loadProducts() {
+  try {
+    const products = await api('/api/products');
+    document.querySelector('#productTable tbody').innerHTML = products.map(p =>
+      '<tr><td>' + p.id + '</td><td>' + escapeHtml(p.name) + '</td><td>$' + p.price +
+      '</td><td>' + p.stockQuantity + '</td></tr>').join('') || '<tr><td colspan="4">No products</td></tr>';
+    document.getElementById('orderProduct').innerHTML = products.map(p =>
+      '<option value="' + p.id + '">' + escapeHtml(p.name) + ' ($' + p.price +
+      ', stock ' + p.stockQuantity + ')</option>').join('');
+  } catch (e) {
+    showMsg('productMsg', 'Failed to load products: ' + e.message, false);
+  }
+}
+
+async function createProduct(event) {
+  event.preventDefault();
+  const body = {
+    name: document.getElementById('pName').value,
+    description: document.getElementById('pDesc').value,
+    price: parseFloat(document.getElementById('pPrice').value),
+    stockQuantity: parseInt(document.getElementById('pStock').value, 10)
+  };
+  try {
+    const created = await api('/api/products', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    showMsg('productMsg', 'Created product #' + created.id + ' ' + created.name, true);
+    event.target.reset();
+    loadProducts();
+  } catch (e) {
+    showMsg('productMsg', 'Create failed: ' + e.message, false);
+  }
+  return false;
+}
+
+async function placeOrder(event) {
+  event.preventDefault();
+  const body = {
+    productId: parseInt(document.getElementById('orderProduct').value, 10),
+    quantity: parseInt(document.getElementById('orderQty').value, 10)
+  };
+  try {
+    const order = await api('/api/orders', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    showMsg('orderMsg', 'Order #' + order.id + ' placed: ' + order.quantity + ' x ' +
+      escapeHtml(order.productName || ('product ' + order.productId)) + ' = $' + order.totalPrice, true);
+    loadProducts();
+    loadOrders();
+  } catch (e) {
+    showMsg('orderMsg', 'Order failed: ' + e.message, false);
+  }
+  return false;
+}
+
+async function loadOrders() {
+  try {
+    const orders = await api('/api/orders');
+    document.querySelector('#orderTable tbody').innerHTML = orders.map(o =>
+      '<tr><td>' + o.id + '</td><td>' + escapeHtml(o.productName || o.productId) + '</td><td>' + o.quantity +
+      '</td><td>$' + o.totalPrice + '</td><td>' + o.status + '</td><td>' + (o.createdAt || '') + '</td></tr>'
+    ).join('') || '<tr><td colspan="6">No orders yet</td></tr>';
+  } catch (e) {
+    document.querySelector('#orderTable tbody').innerHTML =
+      '<tr><td colspan="6">Failed to load orders: ' + escapeHtml(e.message) + '</td></tr>';
+  }
+}
+
+loadProducts();
+loadOrders();
+</script>
+</body>
+</html>
