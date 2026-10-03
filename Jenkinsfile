@@ -35,7 +35,6 @@ pipeline {
                                 usernameVariable: 'EC2_SSH_USER'
                         )
                 ]) {
-
                     bat """
                         scp -o StrictHostKeyChecking=no ^
                         -i "%EC2_KEY%" ^
