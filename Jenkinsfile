@@ -38,7 +38,7 @@ pipeline {
                     bat """
                 scp -o StrictHostKeyChecking=no ^
                 -i "%EC2_KEY%" ^
-                target\\eureka-server-0.0.1.jar ^
+                target\\eureka-server-1.0.0.jar ^
                 %EC2_SSH_USER%@%EC2_HOST%:%APP_DIR%/
             """
 
