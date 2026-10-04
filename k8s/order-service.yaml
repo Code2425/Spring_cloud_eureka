@@ -1,0 +1,40 @@
+# order-service on KIND. Same Eureka DNS note as product-service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: order-service }
+  template:
+    metadata:
+      labels: { app: order-service }
+    spec:
+      containers:
+      - name: order-service
+        image: DOCKERHUB_USER/order-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8082
+        env:
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://eureka-server:8761/eureka"
+        readinessProbe:
+          tcpSocket: { port: 8082 }
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket: { port: 8082 }
+          initialDelaySeconds: 120
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+spec:
+  selector: { app: order-service }
+  ports:
+  - port: 8082
+    targetPort: 8082

@@ -1,0 +1,48 @@
+# eureka-server on KIND.
+# "DOCKERHUB_USER" is replaced with your real Docker Hub username by the
+# Jenkinsfile before kubectl apply (one less file to hand-edit).
+# Service discovery note: inside the cluster every pod reaches Eureka at
+# http://eureka-server:8761 — Kubernetes Service DNS, NOT localhost.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eureka-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: eureka-server }
+  template:
+    metadata:
+      labels: { app: eureka-server }
+    spec:
+      containers:
+      - name: eureka-server
+        image: DOCKERHUB_USER/eureka-server:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8761
+        env:
+        # Eureka server must NOT try to register with itself
+        - name: EUREKA_CLIENT_REGISTERWITHEUREKA
+          value: "false"
+        - name: EUREKA_CLIENT_FETCHREGISTRY
+          value: "false"
+        # tcpSocket probes: safe even if your app has no actuator endpoint
+        readinessProbe:
+          tcpSocket: { port: 8761 }
+          initialDelaySeconds: 45
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket: { port: 8761 }
+          initialDelaySeconds: 90
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eureka-server
+spec:
+  selector: { app: eureka-server }
+  ports:
+  - port: 8761
+    targetPort: 8761
