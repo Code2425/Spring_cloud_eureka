@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        EC2_HOST = '18.117.10.150'
+        EC2_HOST = '18.188.48.129'
         EC2_USER = 'ec2-user'
         APP_DIR  = '/order-service'
         EC2_KEY  = 'C:\\ProgramData\\Jenkins\\.ssh\\ec2-key.pem'
