@@ -22,7 +22,7 @@ pipeline {
         stage('Deploy to KIND') {
             steps {
                 bat '''
-                    kubectl config use-context kind-my-cluster-control-plane
+                    kubectl config use-context kind-dev
                     powershell -Command "(Get-ChildItem k8s/*.yaml) | ForEach-Object { (Get-Content $_.FullName).replace('DOCKERHUB_USER', $env:DOCKERHUB_USR) | Set-Content $_.FullName }"
                     kubectl apply -f k8s/
                     for %%s in (eureka-server product-service order-service gateway-service) do (
