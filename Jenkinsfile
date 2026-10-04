@@ -45,11 +45,13 @@ pipeline {
                     :wait_eureka
                     curl -sf http://%EC2_HOST%:8761/ >nul && goto eureka_up
                     set /a tries+=1
-                    if %tries% geq 12 exit /b 1
+                    if %tries% geq 18 exit /b 1
                     powershell -Command "Start-Sleep -Seconds 10"
                     goto wait_eureka
                     :eureka_up
-                    echo Eureka is UP — open http://%EC2_HOST%:8761 in your browser
+                    echo Eureka is UP: http://%EC2_HOST%:8761
+                    powershell -Command "if (-not (Test-NetConnection -ComputerName %EC2_HOST% -Port 8081 -WarningAction SilentlyContinue).TcpTestSucceeded) { exit 1 }" && echo product-service port 8081 is listening
+                    powershell -Command "if (-not (Test-NetConnection -ComputerName %EC2_HOST% -Port 8082 -WarningAction SilentlyContinue).TcpTestSucceeded) { exit 1 }" && echo order-service port 8082 is listening
                 '''
             }
         }
