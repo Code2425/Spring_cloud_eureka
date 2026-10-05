@@ -1,18 +1,36 @@
+# K8s API version for Ingress objects; networking.k8s.io/v1 is the stable version — works on KIND, EKS, any cluster
 apiVersion: networking.k8s.io/v1
+# WHAT this is: an Ingress = L7 HTTP router sitting at the cluster's front door; it maps hostnames/paths to backend Services
 kind: Ingress
+# Identity block for this object
 metadata:
+  # The Ingress's name; what you see in kubectl get ingress
   name: microservices
+  # Controller-specific settings live here as annotations — plain key/value pairs the ingress controller reads
   annotations:
+    # NGINX-specific: rewrite the matched path to / before forwarding — so a request to /api/orders reaches the gateway as /api/orders cleanly
     nginx.ingress.kubernetes.io/rewrite-target: /
+# The desired routing state; the NGINX controller watches this and reconfigures itself to match
 spec:
+  # Which ingress controller handles this object — must match the installed controller; without it, no controller claims the Ingress and nothing routes
   ingressClassName: nginx
+  # The routing table: a list of hostname-based rules evaluated in order
   rules:
+    # All requests with Host header "microservices.local" use this rule — the hostname you mapped to 127.0.0.1 in your hosts file
     - host: microservices.local
+      # HTTP (not TLS) routing rules for this host
       http:
+        # Path entries under this host; first match wins
         paths:
+          # Catch-all path — every request path starts with /
           - path: /
+            # Prefix = "starts with"; alternative is Exact. Prefix / matches everything, making this the default route
             pathType: Prefix
+            # WHERE to send matched traffic
             backend:
+              # Backend is a Kubernetes Service (not a pod IP — the Service load-balances across gateway pods for you)
               service:
+                # Must match the Service name from gateway-service.yaml — a typo here = 503 Service Unavailable with no obvious error
                 name: gateway-service
+                # The Service's port (not the container's) — traffic goes browser → ingress → Service:8080 → pod:8080
                 port: { number: 8080 }

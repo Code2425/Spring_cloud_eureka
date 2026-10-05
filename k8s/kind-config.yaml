@@ -1,10 +1,20 @@
+# WHAT this file is: a KIND cluster definition — it describes the throwaway Kubernetes cluster KIND builds as Docker containers on your laptop
 kind: Cluster
+# KIND's own API version for this config format; v1alpha4 is current — an old version here can silently ignore new fields
 apiVersion: kind.x-k8s.io/v1alpha4
+# The cluster's name; controls the kubectl context name (kind-dev) and the Docker container names (dev-control-plane)
 name: dev
+# The list of "machines" in the cluster — each becomes a Docker container; one control-plane is enough for local dev
 nodes:
+  # A single-node cluster: this one container is both control plane AND worker (runs your pods too)
   - role: control-plane
+    # Extra port mappings from the container to YOUR laptop — WITHOUT these, host ports never reach the cluster; this was the exact reason microservices.local didn't load earlier
     extraPortMappings:
-      - containerPort: 80    # ingress HTTP
+      # The port INSIDE the kind container where the NGINX ingress controller listens for HTTP
+      - containerPort: 80
+        # The port ON YOUR LAPTOP mapped to it — lets you open http://microservices.local/ with no :port in the URL
         hostPort: 80
-      - containerPort: 443   # ingress HTTPS
+      # The port INSIDE the container where the ingress controller listens for HTTPS
+      - containerPort: 443
+        # Mapped to your laptop's 443 for future TLS termination — unused right now, but adding it now avoids another cluster recreate later
         hostPort: 443

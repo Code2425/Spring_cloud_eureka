@@ -1,48 +1,82 @@
-# eureka-server on KIND.
-# "DOCKERHUB_USER" is replaced with your real Docker Hub username by the
-# Jenkinsfile before kubectl apply (one less file to hand-edit).
-# Service discovery note: inside the cluster every pod reaches Eureka at
-# http://eureka-server:8761 — Kubernetes Service DNS, NOT localhost.
+# K8s API version for Deployments; "apps/v1" is the stable one — this manifest works on any cluster, KIND or EKS
 apiVersion: apps/v1
+# WHAT this object is: a Deployment = "keep N identical pods of my app running, rolling-update them on change" — the standard way to run stateless services
 kind: Deployment
+# Identity block for this object
 metadata:
+  # The Deployment's name; also what you target in kubectl commands (kubectl rollout status deployment/eureka-server)
   name: eureka-server
+# The desired state you declare; K8s controllers work to make reality match this
 spec:
+  # How many pod copies to keep alive; 1 is fine for local KIND, prod would use 2+ for HA
   replicas: 1
+  # Tells the Deployment WHICH pods it owns — it manages only pods matching these labels
   selector:
+    # Must match the pod template labels below; a mismatch here is the classic "pods created but deployment shows 0 available" bug
     matchLabels: { app: eureka-server }
+  # The pod blueprint — every replica is stamped out from this
   template:
+    # Labels ON THE POD (different from the Deployment's own metadata above)
     metadata:
+      # The label the selector matches AND the Service uses to find these pods — this one label ties Deployment ↔ Pods ↔ Service together
       labels: { app: eureka-server }
+    # What goes INSIDE each pod
     spec:
+      # A pod can hold multiple containers; we need just one
       containers:
-      - name: eureka-server
-        image: DOCKERHUB_USER/eureka-server:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8761
-        env:
-        # Eureka server must NOT try to register with itself
-        - name: EUREKA_CLIENT_REGISTERWITHEUREKA
-          value: "false"
-        - name: EUREKA_CLIENT_FETCHREGISTRY
-          value: "false"
-        # tcpSocket probes: safe even if your app has no actuator endpoint
-        readinessProbe:
-          tcpSocket: { port: 8761 }
-          initialDelaySeconds: 45
-          periodSeconds: 10
-        livenessProbe:
-          tcpSocket: { port: 8761 }
-          initialDelaySeconds: 90
-          periodSeconds: 20
+        # Container name; also the name kubectl set image targets in the Jenkinsfile
+        - name: eureka-server
+          # WHERE the app comes from: Docker Hub repo + tag; Jenkins replaces DOCKERHUB_USER and then pins the real build tag via kubectl set image
+          image: DOCKERHUB_USER/eureka-server:latest
+          # Always re-pull on pod start; critical with the :latest tag or you'd silently run a stale cached image
+          imagePullPolicy: Always
+          # Documents which port the container listens on (informational for Deployments; the Service below does the actual routing)
+          ports:
+            # Eureka's port — must match what the Spring Boot app actually binds to
+            - containerPort: 8761
+          # Environment variables injected into the container — this is how K8s configures apps without rebuilding images
+          env:
+            # Spring Boot relaxed binding → eureka.client.register-with-eureka; stops the server trying to register with itself
+            - name: EUREKA_CLIENT_REGISTERWITHEUREKA
+              # Without this, Eureka logs endless self-registration errors on startup
+              value: "false"
+            # → eureka.client.fetch-registry; a server doesn't need to fetch a registry — it IS the registry
+            - name: EUREKA_CLIENT_FETCHREGISTRY
+              # Saves pointless polling traffic and startup warnings
+              value: "false"
+          # "Is this pod ready for traffic?" — K8s removes NOT-ready pods from the Service so users never hit a half-started app
+          readinessProbe:
+            # Simplest probe: can we open a TCP connection? Used instead of httpGet so it works even without Spring Actuator
+            tcpSocket: { port: 8761 }
+            # Wait 45s after container start before first check — Spring Boot needs time; too short = K8s kills a healthy-but-slow starter
+            initialDelaySeconds: 45
+            # Re-check every 10s; a pod that later stops responding is pulled from the Service
+            periodSeconds: 10
+          # "Is this pod still alive?" — if this fails, K8s RESTARTS the container (unlike readiness, which only removes it from traffic)
+          livenessProbe:
+            # Same TCP check; deadlocks/hung JVMs get recycled automatically
+            tcpSocket: { port: 8761 }
+            # Longer than readiness — you never want liveness killing a pod that's just slow to boot
+            initialDelaySeconds: 90
+            # Checked less often; restarts are disruptive so this is the coarser safety net
+            periodSeconds: 20
+# Document separator: everything above was ONE object, everything below is the NEXT object in the same file
 ---
+# Core API version for Service objects
 apiVersion: v1
+# WHAT this is: a Service = stable virtual IP + DNS name that load-balances across the pods matching its selector
 kind: Service
+# Identity block
 metadata:
+  # THIS name becomes the DNS name other pods use: http://eureka-server:8761 — this is the service-discovery magic
   name: eureka-server
+# Desired state for the Service
 spec:
+  # "Send traffic to pods with this label" — must match the pod template labels above, or the Service gets zero endpoints
   selector: { app: eureka-server }
+  # Which ports the Service exposes
   ports:
-  - port: 8761
-    targetPort: 8761
+    # The port OTHER pods/services use to reach it (the stable front door)
+    - port: 8761
+      # The port ON THE POD to forward to — same here, but they can differ (e.g. Service port 80 → container 8080)
+      targetPort: 8761
